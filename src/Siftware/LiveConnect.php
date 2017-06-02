@@ -131,7 +131,7 @@ class LiveConnect
         // save
         if (isset($authTokens))
         {
-            if (is_object($authTokens) && $this->tokenStore->saveTokens($authTokens)) {
+            if (is_array($authTokens) && $this->tokenStore->saveTokens($authTokens)) {
 
                 $this->logger->debug("Saving tokens");
                 return true;
@@ -177,16 +177,16 @@ class LiveConnect
                         http_build_query($payload));
 
         $response = $client->post($payload);
-        $responseJson = json_decode($response);
+        $responseJson = json_decode($response, true);
 
-        if (is_object($responseJson) && property_exists($responseJson, 'access_token'))
+        if (is_array($responseJson) && isset($responseJson['access_token']))
         {
             return $responseJson;
         }
-        elseif(is_object($responseJson) && property_exists($responseJson, 'error'))
+        elseif(is_array($responseJson) && isset($responseJson['error']))
         {
             $this->logger->error("Error getting access token from Live Connect: " .
-                $responseJson->error . ' : ' . $responseJson->error_description);
+                $responseJson['error'] . ' : ' . $responseJson['error_description']);
 
             return false;
 
@@ -235,7 +235,7 @@ class LiveConnect
     {
         $client = new LiveRequest("https://apis.live.net/v5.0/" . $guid,
             $this->logger, $this->getAccessToken());
-        
+
         return $client->get();
     }
 
@@ -247,7 +247,7 @@ class LiveConnect
     {
         $client = new LiveRequest("https://apis.live.net/v5.0/" . $guid . "/contacts",
             $this->logger, $this->getAccessToken());
-        
+
         return $client->get();
     }
 }

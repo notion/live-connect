@@ -15,6 +15,8 @@ namespace Siftware;
 use GuzzleHttp\Client;
 use Psr\Log\LoggerInterface;
 
+use GuzzleHttp\Psr7\Request;
+
 use GuzzleHttp\Subscriber\Log\LogSubscriber;
 use GuzzleHttp\Subscriber\Log\Formatter;
 
@@ -32,15 +34,11 @@ class LiveRequest
 
     private $logger;
 
-    public function __construct($endpoint, LoggerInterface $logger,
-        $authToken = null)
+    public function __construct($endpoint, LoggerInterface $logger, $authToken = null)
     {
         $this->endpoint     = $endpoint;
-        
         $this->authToken    = $authToken;
-
         $this->logger       = $logger;
-             
         $this->client       = new Client();
 
         $this->defaultHeaders = array(
@@ -65,32 +63,31 @@ class LiveRequest
     }
 
     // --
-    
+
     public function post($fields = array(), $files = array())
     {
-
-        $request = $this->client->createRequest("POST", $this->endpoint);
-
-        $this->setDefaultHeaders($request);
-
-        $postBody = $request->getBody();
+        $headers = $this->getDefaultHeaders();
+        $form_data = [];
+        $file_data = [];
 
         // standard post fields
         foreach ($fields as $key => $value) {
-            $postBody->setField($key, $value);
+            $form_data[$key] = $value;
         }
 
         // multipart files, uses Guzzle 4.0 PostFile
         foreach ($files as $file) {
-
-            if (is_a($file, 'GuzzleHttp\Post\PostFile')) {
-                $postBody->addFile($file);    
+            if (is_array($file)) {
+                $file_data[] = $file;
             } else {
                 // handle me better
-                $this->logger->error("File ignored, not of type GuzzleHttp\Post\PostFile");
+                $this->logger->error("File ignored, not of type multipart");
             }
         }
-        return $this->send($request);
+
+        $request = new Request("POST", $this->endpoint, $headers);
+
+        return $this->send($request, ['headers' => $headers, 'form_params' => $form_data]);
     }
 
 
@@ -98,21 +95,21 @@ class LiveRequest
 
     public function get()
     {
-        $request = $this->client->createRequest("GET", $this->endpoint);
+        $headers = $this->getDefaultHeaders();
 
-        $this->setDefaultHeaders($request);
+        $request = new Request('GET', $this->endpoint, $headers);
 
-        return $this->send($request);
+        return $this->send($request, ['headers' => $headers]);
     }
 
     /**
     * @return \GuzzleHttp\Message\ResponseInterface
     * @todo improve exception handling, return response and allow clients to handle internally
     */
-    private function send($request)
+    private function send($request, $options = [])
     {
         try {
-            $response = $this->client->send($request);
+            $response = $this->client->send($request, $options);
         } catch (\Exception $e) {
 
             if ($e->hasResponse()) {
@@ -150,26 +147,22 @@ class LiveRequest
         // OK this is a bit weird, the code receiving this is expecting
         // to json_decode it and json_decode($response->json()) give unexpected
         // results. @todo get to the bottom of this
-        return json_encode($response->json());
+        return (string) $response->getBody();
     }
 
     /**
     * Headers we should send with every request
     */
-    private function setDefaultHeaders($request)
+    private function getDefaultHeaders()
     {
+        $headers = [];
         if (isset($this->authToken)) {
-            $request->setHeader('Authorization', "Bearer " . $this->authToken);
+            $headers['Authorization'] = 'Bearer ' . $this->authToken;
         }
 
-        foreach ($this->defaultHeaders as $header => $value) {
-            $request->setHeader($header, $value);
-        }
+        $headers = array_merge($headers, $this->defaultHeaders, $this->extraHeaders);
 
-        foreach ($this->extraHeaders as $header => $value) {
-            $request->setHeader($header, $value);
-        }
-
+        return $headers;
     }
 
 }
